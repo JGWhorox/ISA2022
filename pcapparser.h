@@ -17,10 +17,16 @@
 #include <string>
 #include <cstdint>
 
-#include "cache.h"
-
 
 #pragma pack(push, 1)
+
+struct udpheader{
+    uint16_t source;
+    uint16_t dest;
+    uint16_t len;
+    uint16_t checksum;
+
+};
 
 struct flowHeader{
     uint16_t version;
@@ -36,7 +42,7 @@ struct flowHeader{
 
 struct flowRecord{
     uint32_t srcaddr;
-    uint32_t dtstaddr;
+    uint32_t dstaddr;
     uint32_t nexthop;
     uint16_t input;
     uint16_t output;
@@ -59,8 +65,7 @@ struct flowRecord{
 
 #pragma pack(pop)
 
-
 void packetHandler(u_char *userData, const struct pcap_pkthdr* pkthdr, const u_char* packet);
-int parsePcap(std::string filepath);
+int parsePcap(std::string filepath, int maxsize);
 
 #endif

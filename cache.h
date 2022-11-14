@@ -1,4 +1,5 @@
-#pragma once
+#ifndef CACHE_H
+#define CACHE_H
 
 #include <map>
 #include <tuple>
@@ -10,7 +11,7 @@ using key = std::tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t>;
 
 struct flowcachevalue{
     flowHeader header;
-    std::vector<flowRecord> record;
+    flowRecord record;
 };
 
 class cache{
@@ -23,6 +24,10 @@ class cache{
     //void deleteflow();
     void exportflow(key k);
     bool hasflow(key k);
+    int size();
 
     cache(int size);
 };
+
+
+#endif

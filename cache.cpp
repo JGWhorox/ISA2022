@@ -1,5 +1,6 @@
 #include "cache.h"
 
+
 cache::cache(int size){
     maxSize = size;
 }
@@ -26,12 +27,16 @@ flowcachevalue &cache::getflow(key k){
     return cachemap.find(k)->second;
 }
 bool cache::hasflow(key k){
-    auto result = cachemap.find(k);
-    if (result == cachemap.end()){
-        return true;
+    /*auto result = cachemap.count(k);
+    if (result == 0){
+        return false;
     }
-    return false;
+    return true;*/
+    return cachemap.find(k) == cachemap.end() ? 0 : 1;
 }
 void cache::exportflow(key k){
     //problem pre buduceho johanna + delete z cache-u po exporte .erase
+}
+int cache::size(){
+    return cachemap.size();
 }

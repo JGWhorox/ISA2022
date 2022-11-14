@@ -11,6 +11,7 @@
 #include <cstdint>
 
 #include "pcapparser.h"
+#include "cache.h"
 #include "clifunctionality.h"
 
 static inline uint16_t SWAP(uint16_t val) { return (((val << 8 ) & 0xFF00) | ((val >> 8 )& 0x00FF)); };
