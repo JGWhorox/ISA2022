@@ -63,9 +63,14 @@ struct flowRecord{
     uint16_t pad2;
 };
 
+struct flowcachevalue{
+    flowHeader header;
+    flowRecord record;
+};
+
 #pragma pack(pop)
 
-void packetHandler(u_char *userData, const struct pcap_pkthdr* pkthdr, const u_char* packet);
+flowRecord updateRecord(flowRecord newRecord, const struct ip * ipHeader, flowcachevalue ptr, struct pcap_pkthdr &header, uint64_t boottime, int ipSize);
 int parsePcap(std::string filepath, int maxsize);
 
 #endif

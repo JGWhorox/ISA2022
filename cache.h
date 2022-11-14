@@ -9,16 +9,12 @@
 
 using key = std::tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t>;
 
-struct flowcachevalue{
-    flowHeader header;
-    flowRecord record;
-};
-
 class cache{
-    std::map<key, flowcachevalue> cachemap;
+    
     int maxSize;
 
     public:
+    std::map<key, flowcachevalue> cachemap;
     void insertflow(key k, flowcachevalue val);
     flowcachevalue &getflow(key k);
     //void deleteflow();

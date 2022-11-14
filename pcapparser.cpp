@@ -3,7 +3,10 @@ using namespace std;
 #include "pcapparser.h"
 #include "cache.h"
 
+
+//updates the consistent data across different protocols
 flowRecord updateRecord(flowRecord newRecord, const struct ip * ipHeader, flowcachevalue ptr, struct pcap_pkthdr &header, uint64_t boottime, int ipSize){
+    
     newRecord.srcaddr = ipHeader->ip_src.s_addr;
     newRecord.dstaddr = ipHeader->ip_dst.s_addr;
 
@@ -19,13 +22,16 @@ flowRecord updateRecord(flowRecord newRecord, const struct ip * ipHeader, flowca
     newRecord.tos = ipHeader->ip_tos;
     return newRecord;
 }
-
+//parses packets into flows and maps them into cache
 int parsePcap(std::string filepath, int maxsize){
     cache fcache(maxsize);
     
     uint64_t boottime = 0;
+    uint64_t pktTime = 0;
+
     uint8_t *packet;
     pcap_t *handle;
+
     struct pcap_pkthdr header;
     char errbuf[PCAP_ERRBUF_SIZE];
 
@@ -33,7 +39,7 @@ int parsePcap(std::string filepath, int maxsize){
 
     handle = pcap_open_offline(fname, errbuf);
     if (handle == NULL) {
-        cout << "pcap_open_offline() failed: " << errbuf << endl;
+        std::cout << "pcap_open_offline() failed: " << errbuf << endl;
         return 1;
     }
 
@@ -48,7 +54,15 @@ int parsePcap(std::string filepath, int maxsize){
             continue;
         }
         
+        pktTime = (header.ts.tv_sec * (uint64_t)1000) + (header.ts.tv_usec /1000);
+
         int ipSize = 4* (ipHeader->ip_hl & 0x0F); //POTENTIAL PROBLEM W BITWISE AND
+
+
+        for (std::map<key, flowcachevalue>::iterator it=fcache.cachemap.begin(); it!=fcache.cachemap.end(); ++it){
+            std::cout << it->second.record.first << '\n';
+        }
+            
 
         /*
         char srcIp[INET_ADDRSTRLEN];
@@ -61,8 +75,10 @@ int parsePcap(std::string filepath, int maxsize){
             continue;
         }
         */
+
+
         if (ipHeader->ip_p == IPPROTO_UDP){
-            cout << "UDP" << endl;
+            //cout << "UDP" << endl;
             const struct udpheader * udpHeader = (udpheader*)(packet + ipSize + sizeof(ether_header));
 
             key currentKey = {ipHeader->ip_src.s_addr,ipHeader->ip_dst.s_addr,udpHeader->source,udpHeader->dest,ipHeader->ip_p};
@@ -80,14 +96,10 @@ int parsePcap(std::string filepath, int maxsize){
             newRecord.dstport = udpHeader->dest;
             newRecord.srcport = udpHeader->source;
 
-            
-
             ptr.record = newRecord;
-
-            cout << fcache.size() << endl;
         }
         else if (ipHeader->ip_p == IPPROTO_TCP){
-            cout << "TCP" << endl;
+            //cout << "TCP" << endl;
             const struct tcphdr * tcpHeader = (tcphdr*)(packet + ipSize + sizeof(ether_header));
             //u_int srcport = ntohs(tcpHeader->source);
             //u_int dstport = ntohs(tcpHeader->dest);
@@ -102,20 +114,18 @@ int parsePcap(std::string filepath, int maxsize){
             flowcachevalue ptr = fcache.getflow(currentKey);
             
             newRecord = updateRecord(newRecord, ipHeader, ptr, header, boottime, ipSize);
+            
+            //std::cout << newRecord.first << endl;
 
             newRecord.dstport = tcpHeader->dest;
             newRecord.srcport = tcpHeader->source;
 
             newRecord.tcp_flags = ptr.record.tcp_flags | tcpHeader->th_flags;
 
-            
-
             ptr.record = newRecord;
-
-            cout << fcache.size() << endl;
         }
         else if (ipHeader->ip_p == IPPROTO_ICMP){
-            cout << "ICMP" << endl;
+            //cout << "ICMP" << endl;
             key currentKey = {ipHeader->ip_src.s_addr,ipHeader->ip_dst.s_addr,(uint16_t)0,(uint16_t)0,ipHeader->ip_p};
 
             flowRecord newRecord = {0};
@@ -131,21 +141,14 @@ int parsePcap(std::string filepath, int maxsize){
             newRecord.srcport = (uint16_t)0;
 
             ptr.record = newRecord;
-
-            cout << fcache.size() << endl;
         }      
         else{
             continue;
         }
-        //cout << srcIp << endl;
-        //cout << dstIp << endl;
-        //cout << "next packet" << endl;
-
-        
+        //std::cout << fcache.size() << endl;
     }
-    
 
-    cout << "capture finished" << endl;
+    std::cout << "parsing finished" << endl;
 
     return 0;
 }
