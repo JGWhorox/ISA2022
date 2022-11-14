@@ -41,8 +41,11 @@ bool cache::hasflow(key k){
     return true;*/
     return cachemap.find(k) == cachemap.end() ? 0 : 1;
 }
-void cache::exportflow(key k){
+flowcachevalue cache::exportflow(key k){
     //problem pre buduceho johanna + delete z cache-u po exporte .erase
+    flowcachevalue retval = cachemap.find(k)->second;
+    cachemap.erase(k);
+    return retval;
 }
 int cache::size(){
     return cachemap.size();

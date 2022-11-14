@@ -34,7 +34,7 @@ int main(int argc, char** argv){
     cout << input << endl;
     
     if(parseArgs(args, input)){
-        parsePcap(args.filePath, args.activeTimer, args.timeout, args.flowCache);   
+        parsePcap(args.filePath, args.activeTimer, args.timeout, args.flowCache, args.address, args.port);   
     }
     else{
         cerr << "Given arguments are incorrect!!!" << endl;

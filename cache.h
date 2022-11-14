@@ -19,7 +19,7 @@ class cache{
     flowcachevalue &getflow(key k);
     void updateflow(key k, flowcachevalue val);
     //void deleteflow();
-    void exportflow(key k);
+    flowcachevalue exportflow(key k);
     bool hasflow(key k);
     int size();
 

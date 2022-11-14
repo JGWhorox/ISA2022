@@ -2,7 +2,7 @@ using namespace std;
 
 #include "pcapparser.h"
 #include "cache.h"
-
+#include "exporter.h"
 
 //updates the consistent data across different protocols
 flowRecord updateRecord(flowRecord newRecord, const struct ip * ipHeader, flowcachevalue ptr, struct pcap_pkthdr &header, uint64_t boottime, int ipSize){
@@ -11,7 +11,7 @@ flowRecord updateRecord(flowRecord newRecord, const struct ip * ipHeader, flowca
     newRecord.dstaddr = ipHeader->ip_dst.s_addr;
 
     newRecord.dPkts = ptr.record.dPkts + 1;
-    newRecord.dOctets = ptr.record.dOctets + (ipHeader->ip_len - ipSize);
+    newRecord.dOctets = ptr.record.dOctets + ntohs(ipHeader->ip_len) + sizeof(ether_header);
 
     if (ptr.record.first == 0){
         newRecord.first = (uint32_t)(((header.ts.tv_sec * (uint64_t)1000) + ((header.ts.tv_usec + 500) /1000))-boottime);
@@ -25,7 +25,7 @@ flowRecord updateRecord(flowRecord newRecord, const struct ip * ipHeader, flowca
 
 flowHeader updateHeader(flowHeader newHeader, struct pcap_pkthdr &header, uint64_t boottime, uint64_t pktTime, int size){
     newHeader.version = htons(5);
-    newHeader.count = 1;
+    newHeader.count = htons(1);
     newHeader.sys_uptime = (uint32_t)(pktTime-boottime);
     newHeader.unix_secs = (uint32_t)header.ts.tv_sec;
     newHeader.unix_nsecs = (uint32_t)(header.ts.tv_usec * 1000);
@@ -35,7 +35,7 @@ flowHeader updateHeader(flowHeader newHeader, struct pcap_pkthdr &header, uint64
 }
 
 //parses packets into flows and maps them into cache
-int parsePcap(std::string filepath, int atimer, int timeout, int maxsize){
+int parsePcap(std::string filepath, int atimer, int timeout, int maxsize, std::string address, uint16_t port){
     uint16_t flowcounter = 0;
     cache fcache(maxsize);
     
@@ -75,12 +75,14 @@ int parsePcap(std::string filepath, int atimer, int timeout, int maxsize){
         int ipSize = 4* (ipHeader->ip_hl & 0x0F); //POTENTIAL PROBLEM W BITWISE AND
         
 
-        for (std::map<key, flowcachevalue>::iterator it=fcache.cachemap.begin(); it!=fcache.cachemap.end(); ++it){
+        for (std::map<key, flowcachevalue>::iterator it=fcache.cachemap.begin(); it!=fcache.cachemap.end(); it++){
             if(((uint32_t)(pktTime-boottime) - it->second.record.first) > atimer*1000){
-                //export active flow
+                flowcachevalue val = fcache.exportflow((it++)->first);
+                exportFlow(address, port, val);
             }
             if(((uint32_t)(pktTime-boottime) - it->second.record.last) > timeout*1000){
-                //export inactive flow
+                flowcachevalue val = fcache.exportflow((it++)->first);
+                exportFlow(address, port, val);
             }
         }
             //std::cout << it->second.header.unix_secs << '\n';
@@ -112,16 +114,16 @@ int parsePcap(std::string filepath, int atimer, int timeout, int maxsize){
         else if (ipHeader->ip_p == IPPROTO_TCP){
             //cout << "TCP" << endl;
             const struct tcphdr * tcpHeader = (tcphdr*)(packet + ipSize + sizeof(ether_header));
-            dstport = tcpHeader->dest;
-            srcport = tcpHeader->source;
+            dstport = tcpHeader->th_dport;
+            srcport = tcpHeader->th_sport;
             tcpFlags = tcpHeader->th_flags;
             if ((tcpFlags & TH_RST) || (tcpFlags & TH_FIN)) tcpflag_exportTrigger = true;
             portdefined = true;
         }
         else if (ipHeader->ip_p == IPPROTO_ICMP){
             //cout << "ICMP" << endl;
-            dstport = (uint16_t)0;
-            srcport = (uint16_t)0;
+            dstport = 0;
+            srcport = 0;
             portdefined = true;
         }      
         else{
@@ -139,7 +141,7 @@ int parsePcap(std::string filepath, int atimer, int timeout, int maxsize){
             flowcachevalue ptr = fcache.getflow(currentKey);
 
             if (ptr.header.version == 0){
-                std::cout << "updating header" << endl;
+                //std::cout << "updating header" << endl;
                 newHeader = updateHeader(newHeader,header,boottime,pktTime,flowcounter);
             }
             
@@ -153,17 +155,26 @@ int parsePcap(std::string filepath, int atimer, int timeout, int maxsize){
             ptr.record = newRecord;
             ptr.header = newHeader;
             fcache.updateflow(currentKey,ptr);
+
+            if(tcpflag_exportTrigger){
+                flowcachevalue val = fcache.exportflow(currentKey);
+                exportFlow(address, port, val);
+            }
         }
-        if(tcpflag_exportTrigger){
-            //export flow
-            //std::cout << "exporting based on tcp flags" << endl;
-        }
+        
         
         //std::cout << fcache.size() << endl;
     }
     
-    std::cout << "parsing finished" << endl;
+    std::cout << "parsing finished, exporting the remaining flows in map" << endl;
 
+    for (std::map<key, flowcachevalue>::iterator it = fcache.cachemap.begin(); it != fcache.cachemap.end(); ){
+        //std::cout << "HUE" << ntohs(std::get<2>(it->first)) << std::endl;
+        flowcachevalue val = fcache.exportflow((it++)->first);
+        exportFlow(address, port, val);
+    }
+
+    std::cout << "finished exporting flows from map, all sent to collector" << endl;
     return 0;
 }
             /*char srcIp[INET_ADDRSTRLEN];
