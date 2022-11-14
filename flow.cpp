@@ -14,7 +14,7 @@
 #include <sys/socket.h>
 
 //custom
-#include "clifunctionality.h"
+#include "flow.h"
 
 
 using namespace std;
@@ -34,8 +34,7 @@ int main(int argc, char** argv){
     cout << input << endl;
     
     if(parseArgs(args, input)){
-        
-        
+        parsePcap(args.filePath);   
     }
     else{
         cerr << "Given arguments are incorrect!!!" << endl;

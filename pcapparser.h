@@ -1,16 +1,24 @@
 /**
  * author Johann A. Gawron - xgawro00
- * file flow.h
+ * file pcapparser.h
  * brief main program declarations
  */
 
 #ifndef PCAPPARSER_H
 #define PCAPPARSER_H
 
+#include <iostream>
+#include <pcap.h>
+#include <net/ethernet.h>
+#include <netinet/ip.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <arpa/inet.h>
 #include <string>
 #include <cstdint>
 
-static inline uint16_t SWAP(uint16_t val) { return (((val << 8 ) & 0xFF00) | ((val >> 8 )& 0x00FF)); };
+#include "cache.h"
+
 
 #pragma pack(push, 1)
 
@@ -50,3 +58,9 @@ struct flowRecord{
 };
 
 #pragma pack(pop)
+
+
+void packetHandler(u_char *userData, const struct pcap_pkthdr* pkthdr, const u_char* packet);
+int parsePcap(std::string filepath);
+
+#endif
