@@ -72,6 +72,6 @@ struct flowcachevalue{
 #pragma pack(pop)
 
 flowRecord updateRecord(flowRecord newRecord, const struct ip * ipHeader, flowcachevalue ptr, struct pcap_pkthdr &header, uint64_t boottime, int ipSize);
-int parsePcap(std::string filepath, int maxsize);
+int parsePcap(std::string filepath, int atimer, int timeout, int maxsize);
 
 #endif

@@ -35,7 +35,8 @@ flowHeader updateHeader(flowHeader newHeader, struct pcap_pkthdr &header, uint64
 }
 
 //parses packets into flows and maps them into cache
-int parsePcap(std::string filepath, int maxsize){
+int parsePcap(std::string filepath, int atimer, int timeout, int maxsize){
+    uint16_t flowcounter = 0;
     cache fcache(maxsize);
     
     uint64_t boottime = 0;
@@ -74,11 +75,16 @@ int parsePcap(std::string filepath, int maxsize){
         int ipSize = 4* (ipHeader->ip_hl & 0x0F); //POTENTIAL PROBLEM W BITWISE AND
         
 
-        for (std::map<key, flowcachevalue>::iterator it=fcache.cachemap.begin(); it!=fcache.cachemap.end(); ++it)
-            std::cout << it->second.header.unix_secs << '\n';
+        for (std::map<key, flowcachevalue>::iterator it=fcache.cachemap.begin(); it!=fcache.cachemap.end(); ++it){
+            if(((uint32_t)(pktTime-boottime) - it->second.record.first) > atimer*1000){
+                //export active flow
+            }
+            if(((uint32_t)(pktTime-boottime) - it->second.record.last) > timeout*1000){
+                //export inactive flow
+            }
+        }
+            //std::cout << it->second.header.unix_secs << '\n';
         
-            
-
         /*
         char srcIp[INET_ADDRSTRLEN];
         char dstIp[INET_ADDRSTRLEN];
@@ -90,88 +96,72 @@ int parsePcap(std::string filepath, int maxsize){
             continue;
         }
         */
-
+        uint16_t srcport;
+        uint16_t dstport;
+        uint8_t tcpFlags = 0;
+        bool tcpflag_exportTrigger = false;
+        bool portdefined = false;
 
         if (ipHeader->ip_p == IPPROTO_UDP){
             //cout << "UDP" << endl;
             const struct udpheader * udpHeader = (udpheader*)(packet + ipSize + sizeof(ether_header));
-
-            key currentKey = {ipHeader->ip_src.s_addr,ipHeader->ip_dst.s_addr,udpHeader->source,udpHeader->dest,ipHeader->ip_p};
-
-            if (fcache.hasflow(currentKey) == false){   
-                //cout << "DEBUG: hasflow returned false creating new item in map" << endl;            
-                fcache.insertflow(currentKey, flowcachevalue());
-            }
-            flowcachevalue ptr = fcache.getflow(currentKey);
-
-            if (ptr.header.version == 0){
-                std::cout << "updating header" << endl;
-                newHeader = updateHeader(newHeader,header,boottime,pktTime,fcache.size());
-            }
-            
-            newRecord = updateRecord(newRecord, ipHeader, ptr, header, boottime, ipSize);
-            
-            newRecord.dstport = udpHeader->dest;
-            newRecord.srcport = udpHeader->source;
-
-            ptr.record = newRecord;
-            ptr.header = newHeader;
-            fcache.updateflow(currentKey,ptr);
+            dstport = udpHeader->dest;
+            srcport = udpHeader->source;
+            portdefined = true;
         }
         else if (ipHeader->ip_p == IPPROTO_TCP){
             //cout << "TCP" << endl;
             const struct tcphdr * tcpHeader = (tcphdr*)(packet + ipSize + sizeof(ether_header));
-
-            key currentKey = {ipHeader->ip_src.s_addr,ipHeader->ip_dst.s_addr,tcpHeader->source,tcpHeader->dest,ipHeader->ip_p};
-
-            if (fcache.hasflow(currentKey) == false){   
-                fcache.insertflow(currentKey, flowcachevalue());
-            }
-            flowcachevalue ptr = fcache.getflow(currentKey);
-            
-            if (ptr.header.version == 0){
-                std::cout << "updating header" << endl;
-                newHeader = updateHeader(newHeader,header,boottime,pktTime,fcache.size());
-            }
-            newRecord = updateRecord(newRecord, ipHeader, ptr, header, boottime, ipSize);
-
-            newRecord.dstport = tcpHeader->dest;
-            newRecord.srcport = tcpHeader->source;
-
-            newRecord.tcp_flags = ptr.record.tcp_flags | tcpHeader->th_flags;
-
-            ptr.record = newRecord;
-            ptr.header = newHeader;
-            fcache.updateflow(currentKey,ptr);
+            dstport = tcpHeader->dest;
+            srcport = tcpHeader->source;
+            tcpFlags = tcpHeader->th_flags;
+            if ((tcpFlags & TH_RST) || (tcpFlags & TH_FIN)) tcpflag_exportTrigger = true;
+            portdefined = true;
         }
         else if (ipHeader->ip_p == IPPROTO_ICMP){
             //cout << "ICMP" << endl;
-            key currentKey = {ipHeader->ip_src.s_addr,ipHeader->ip_dst.s_addr,(uint16_t)0,(uint16_t)0,ipHeader->ip_p};
-
-            if (fcache.hasflow(currentKey) == false){   
-                fcache.insertflow(currentKey, flowcachevalue());
-            }
-            flowcachevalue ptr = fcache.getflow(currentKey);
-            
-            if (ptr.header.version == 0){
-                std::cout << "updating header" << endl;
-                newHeader = updateHeader(newHeader,header,boottime,pktTime,fcache.size());
-            }
-            newRecord = updateRecord(newRecord, ipHeader, ptr, header, boottime, ipSize);
-
-            newRecord.dstport = (uint16_t)0;
-            newRecord.srcport = (uint16_t)0;
-
-            ptr.record = newRecord;
-            ptr.header = newHeader;
-            fcache.updateflow(currentKey,ptr);
+            dstport = (uint16_t)0;
+            srcport = (uint16_t)0;
+            portdefined = true;
         }      
         else{
             continue;
         }
-        std::cout << fcache.size() << endl;
-    }
 
+        if(portdefined){
+            key currentKey = {ipHeader->ip_src.s_addr,ipHeader->ip_dst.s_addr,srcport,dstport,ipHeader->ip_p};
+
+            if (fcache.hasflow(currentKey) == false){   
+                //cout << "DEBUG: hasflow returned false creating new item in map" << endl;            
+                fcache.insertflow(currentKey, flowcachevalue());
+                flowcounter++;
+            }
+            flowcachevalue ptr = fcache.getflow(currentKey);
+
+            if (ptr.header.version == 0){
+                std::cout << "updating header" << endl;
+                newHeader = updateHeader(newHeader,header,boottime,pktTime,flowcounter);
+            }
+            
+            newRecord = updateRecord(newRecord, ipHeader, ptr, header, boottime, ipSize);
+            
+            newRecord.dstport = dstport;
+            newRecord.srcport = srcport;
+            
+            newRecord.tcp_flags = ptr.record.tcp_flags | tcpFlags;
+
+            ptr.record = newRecord;
+            ptr.header = newHeader;
+            fcache.updateflow(currentKey,ptr);
+        }
+        if(tcpflag_exportTrigger){
+            //export flow
+            //std::cout << "exporting based on tcp flags" << endl;
+        }
+        
+        //std::cout << fcache.size() << endl;
+    }
+    
     std::cout << "parsing finished" << endl;
 
     return 0;
