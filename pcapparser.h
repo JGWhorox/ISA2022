@@ -17,6 +17,7 @@
 #include <string>
 #include <cstdint>
 
+using key = std::tuple<uint32_t, uint32_t, uint16_t, uint16_t, uint8_t>;
 
 #pragma pack(push, 1)
 

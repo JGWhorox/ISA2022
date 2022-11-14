@@ -17,6 +17,7 @@ class cache{
     std::map<key, flowcachevalue> cachemap;
     void insertflow(key k, flowcachevalue val);
     flowcachevalue &getflow(key k);
+    void updateflow(key k, flowcachevalue val);
     //void deleteflow();
     void exportflow(key k);
     bool hasflow(key k);

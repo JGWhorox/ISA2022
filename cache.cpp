@@ -26,6 +26,13 @@ void cache::insertflow(key k, flowcachevalue val){
 flowcachevalue &cache::getflow(key k){
     return cachemap.find(k)->second;
 }
+void cache::updateflow(key k, flowcachevalue val){
+    std::map<key, flowcachevalue>::iterator itr;
+    itr = cachemap.find(k);
+    if (itr != cachemap.end())
+        itr->second = val; 
+}
+
 bool cache::hasflow(key k){
     /*auto result = cachemap.count(k);
     if (result == 0){

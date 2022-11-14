@@ -14,14 +14,26 @@ flowRecord updateRecord(flowRecord newRecord, const struct ip * ipHeader, flowca
     newRecord.dOctets = ptr.record.dOctets + (ipHeader->ip_len - ipSize);
 
     if (ptr.record.first == 0){
-        newRecord.first = (uint32_t)(((header.ts.tv_sec * (uint64_t)1000) + (header.ts.tv_usec /1000))-boottime);
+        newRecord.first = (uint32_t)(((header.ts.tv_sec * (uint64_t)1000) + ((header.ts.tv_usec + 500) /1000))-boottime);
     }
-    newRecord.last = (uint32_t)(((header.ts.tv_sec * (uint64_t)1000) + (header.ts.tv_usec /1000))-boottime);
+    newRecord.last = (uint32_t)(((header.ts.tv_sec * (uint64_t)1000) + ((header.ts.tv_usec + 500) /1000))-boottime);
 
     newRecord.prot = ipHeader->ip_p;
     newRecord.tos = ipHeader->ip_tos;
     return newRecord;
 }
+
+flowHeader updateHeader(flowHeader newHeader, struct pcap_pkthdr &header, uint64_t boottime, uint64_t pktTime, int size){
+    newHeader.version = htons(5);
+    newHeader.count = 1;
+    newHeader.sys_uptime = (uint32_t)(pktTime-boottime);
+    newHeader.unix_secs = (uint32_t)header.ts.tv_sec;
+    newHeader.unix_nsecs = (uint32_t)(header.ts.tv_usec * 1000);
+    newHeader.flow_sequence = size; 
+
+    return newHeader;
+}
+
 //parses packets into flows and maps them into cache
 int parsePcap(std::string filepath, int maxsize){
     cache fcache(maxsize);
@@ -47,21 +59,24 @@ int parsePcap(std::string filepath, int maxsize){
         const struct ether_header * ether = (struct ether_header*)packet;
         const struct ip * ipHeader = (struct ip*)(packet + sizeof(struct ether_header));
         
+        flowRecord newRecord = {0};
+        flowHeader newHeader = {0};
+        
         if(boottime == 0){
-            boottime = (header.ts.tv_sec * (uint64_t)1000) + (header.ts.tv_usec /1000);
+            boottime = (header.ts.tv_sec * (uint64_t)1000) + ((header.ts.tv_usec + 500) /1000);
         }
         if(!ntohs(ether->ether_type) == ETHERTYPE_IP){
             continue;
         }
         
-        pktTime = (header.ts.tv_sec * (uint64_t)1000) + (header.ts.tv_usec /1000);
+        pktTime = (header.ts.tv_sec * (uint64_t)1000) + ((header.ts.tv_usec + 500) /1000);
 
         int ipSize = 4* (ipHeader->ip_hl & 0x0F); //POTENTIAL PROBLEM W BITWISE AND
+        
 
-
-        for (std::map<key, flowcachevalue>::iterator it=fcache.cachemap.begin(); it!=fcache.cachemap.end(); ++it){
-            std::cout << it->second.record.first << '\n';
-        }
+        for (std::map<key, flowcachevalue>::iterator it=fcache.cachemap.begin(); it!=fcache.cachemap.end(); ++it)
+            std::cout << it->second.header.unix_secs << '\n';
+        
             
 
         /*
@@ -83,13 +98,16 @@ int parsePcap(std::string filepath, int maxsize){
 
             key currentKey = {ipHeader->ip_src.s_addr,ipHeader->ip_dst.s_addr,udpHeader->source,udpHeader->dest,ipHeader->ip_p};
 
-            flowRecord newRecord = {0};
-
             if (fcache.hasflow(currentKey) == false){   
                 //cout << "DEBUG: hasflow returned false creating new item in map" << endl;            
                 fcache.insertflow(currentKey, flowcachevalue());
             }
             flowcachevalue ptr = fcache.getflow(currentKey);
+
+            if (ptr.header.version == 0){
+                std::cout << "updating header" << endl;
+                newHeader = updateHeader(newHeader,header,boottime,pktTime,fcache.size());
+            }
             
             newRecord = updateRecord(newRecord, ipHeader, ptr, header, boottime, ipSize);
             
@@ -97,25 +115,25 @@ int parsePcap(std::string filepath, int maxsize){
             newRecord.srcport = udpHeader->source;
 
             ptr.record = newRecord;
+            ptr.header = newHeader;
+            fcache.updateflow(currentKey,ptr);
         }
         else if (ipHeader->ip_p == IPPROTO_TCP){
             //cout << "TCP" << endl;
             const struct tcphdr * tcpHeader = (tcphdr*)(packet + ipSize + sizeof(ether_header));
-            //u_int srcport = ntohs(tcpHeader->source);
-            //u_int dstport = ntohs(tcpHeader->dest);
-            //cout << "src " << srcport << "dst " << dstport << endl;
-            
+
             key currentKey = {ipHeader->ip_src.s_addr,ipHeader->ip_dst.s_addr,tcpHeader->source,tcpHeader->dest,ipHeader->ip_p};
-            flowRecord newRecord = {0};
 
             if (fcache.hasflow(currentKey) == false){   
                 fcache.insertflow(currentKey, flowcachevalue());
             }
             flowcachevalue ptr = fcache.getflow(currentKey);
             
+            if (ptr.header.version == 0){
+                std::cout << "updating header" << endl;
+                newHeader = updateHeader(newHeader,header,boottime,pktTime,fcache.size());
+            }
             newRecord = updateRecord(newRecord, ipHeader, ptr, header, boottime, ipSize);
-            
-            //std::cout << newRecord.first << endl;
 
             newRecord.dstport = tcpHeader->dest;
             newRecord.srcport = tcpHeader->source;
@@ -123,32 +141,47 @@ int parsePcap(std::string filepath, int maxsize){
             newRecord.tcp_flags = ptr.record.tcp_flags | tcpHeader->th_flags;
 
             ptr.record = newRecord;
+            ptr.header = newHeader;
+            fcache.updateflow(currentKey,ptr);
         }
         else if (ipHeader->ip_p == IPPROTO_ICMP){
             //cout << "ICMP" << endl;
             key currentKey = {ipHeader->ip_src.s_addr,ipHeader->ip_dst.s_addr,(uint16_t)0,(uint16_t)0,ipHeader->ip_p};
-
-            flowRecord newRecord = {0};
 
             if (fcache.hasflow(currentKey) == false){   
                 fcache.insertflow(currentKey, flowcachevalue());
             }
             flowcachevalue ptr = fcache.getflow(currentKey);
             
+            if (ptr.header.version == 0){
+                std::cout << "updating header" << endl;
+                newHeader = updateHeader(newHeader,header,boottime,pktTime,fcache.size());
+            }
             newRecord = updateRecord(newRecord, ipHeader, ptr, header, boottime, ipSize);
 
             newRecord.dstport = (uint16_t)0;
             newRecord.srcport = (uint16_t)0;
 
             ptr.record = newRecord;
+            ptr.header = newHeader;
+            fcache.updateflow(currentKey,ptr);
         }      
         else{
             continue;
         }
-        //std::cout << fcache.size() << endl;
+        std::cout << fcache.size() << endl;
     }
 
     std::cout << "parsing finished" << endl;
 
     return 0;
 }
+            /*char srcIp[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, &(ptr.record.srcaddr), srcIp, INET_ADDRSTRLEN);
+            
+            std::cout << srcIp << endl;*/
+            //std::cout << ptr.record.srcaddr << endl;
+
+                        //u_int srcport = ntohs(tcpHeader->source);
+            //u_int dstport = ntohs(tcpHeader->dest);
+            //cout << "src " << srcport << "dst " << dstport << endl;
