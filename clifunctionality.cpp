@@ -131,6 +131,9 @@ bool parseArgs(Arguments &args, string input){
                 }
             }
         }
+        else if(*it == "-h"){
+            printHelp();
+        }
         //flow cache size
         else if(*it == "-m"){
             if(it+1 != splitInput.end()){
@@ -149,6 +152,6 @@ bool parseArgs(Arguments &args, string input){
         }
         //printDebug(args);
     }
-    printDebug(args);
+    //printDebug(args);
     return true;
 }

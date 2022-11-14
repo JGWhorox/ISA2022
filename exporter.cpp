@@ -12,6 +12,8 @@
 
 bool exportFlow(std::string address, uint16_t port, struct flowcachevalue val){
     
+    val.header.version = htons(5);
+    val.header.count = htons(1);
     val.header.sys_uptime = htonl(val.header.sys_uptime);
     val.header.unix_secs = htonl(val.header.unix_secs);
     val.header.unix_nsecs = htonl(val.header.unix_nsecs);

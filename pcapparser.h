@@ -7,11 +7,13 @@
 #ifndef PCAPPARSER_H
 #define PCAPPARSER_H
 
+
 #include <iostream>
 #include <pcap.h>
 #include <net/ethernet.h>
 #include <netinet/ip.h>
 #include <netinet/in.h>
+#define __FAVOR_BSD
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <string>

@@ -4,7 +4,7 @@ using namespace std;
 #include "cache.h"
 #include "exporter.h"
 
-//updates the consistent data across different protocols
+//updates record with the consistent data across different protocols 
 flowRecord updateRecord(flowRecord newRecord, const struct ip * ipHeader, flowcachevalue ptr, struct pcap_pkthdr &header, uint64_t boottime, int ipSize){
     
     newRecord.srcaddr = ipHeader->ip_src.s_addr;
@@ -16,13 +16,14 @@ flowRecord updateRecord(flowRecord newRecord, const struct ip * ipHeader, flowca
     if (ptr.record.first == 0){
         newRecord.first = (uint32_t)(((header.ts.tv_sec * (uint64_t)1000) + ((header.ts.tv_usec + 500) /1000))-boottime);
     }
+
     newRecord.last = (uint32_t)(((header.ts.tv_sec * (uint64_t)1000) + ((header.ts.tv_usec + 500) /1000))-boottime);
 
     newRecord.prot = ipHeader->ip_p;
     newRecord.tos = ipHeader->ip_tos;
     return newRecord;
 }
-
+//updates header
 flowHeader updateHeader(flowHeader newHeader, struct pcap_pkthdr &header, uint64_t boottime, uint64_t pktTime, int size){
     newHeader.version = htons(5);
     newHeader.count = htons(1);
@@ -75,7 +76,7 @@ int parsePcap(std::string filepath, int atimer, int timeout, int maxsize, std::s
         int ipSize = 4* (ipHeader->ip_hl & 0x0F); //POTENTIAL PROBLEM W BITWISE AND
         
 
-        for (std::map<key, flowcachevalue>::iterator it=fcache.cachemap.begin(); it!=fcache.cachemap.end(); it++){
+        for (std::map<key, flowcachevalue>::iterator it=fcache.cachemap.begin(); it!=fcache.cachemap.end();){
             if(((uint32_t)(pktTime-boottime) - it->second.record.first) > atimer*1000){
                 flowcachevalue val = fcache.exportflow((it++)->first);
                 exportFlow(address, port, val);
@@ -84,20 +85,11 @@ int parsePcap(std::string filepath, int atimer, int timeout, int maxsize, std::s
                 flowcachevalue val = fcache.exportflow((it++)->first);
                 exportFlow(address, port, val);
             }
+            else{
+                it++;
+            }
         }
-            //std::cout << it->second.header.unix_secs << '\n';
-        
-        /*
-        char srcIp[INET_ADDRSTRLEN];
-        char dstIp[INET_ADDRSTRLEN];
-        inet_ntop(AF_INET, &(ipHeader->ip_src), srcIp, INET_ADDRSTRLEN);
-        inet_ntop(AF_INET, &(ipHeader->ip_dst), dstIp, INET_ADDRSTRLEN);
-        */
-        /*
-        if ((ipHeader->ip_p != IPPROTO_UDP)&&(ipHeader->ip_p != IPPROTO_TCP)&&(ipHeader->ip_p != IPPROTO_ICMP)){
-            continue;
-        }
-        */
+
         uint16_t srcport;
         uint16_t dstport;
         uint8_t tcpFlags = 0;
@@ -105,14 +97,14 @@ int parsePcap(std::string filepath, int atimer, int timeout, int maxsize, std::s
         bool portdefined = false;
 
         if (ipHeader->ip_p == IPPROTO_UDP){
-            //cout << "UDP" << endl;
+            
             const struct udpheader * udpHeader = (udpheader*)(packet + ipSize + sizeof(ether_header));
             dstport = udpHeader->dest;
             srcport = udpHeader->source;
             portdefined = true;
         }
         else if (ipHeader->ip_p == IPPROTO_TCP){
-            //cout << "TCP" << endl;
+            
             const struct tcphdr * tcpHeader = (tcphdr*)(packet + ipSize + sizeof(ether_header));
             dstport = tcpHeader->th_dport;
             srcport = tcpHeader->th_sport;
@@ -121,7 +113,6 @@ int parsePcap(std::string filepath, int atimer, int timeout, int maxsize, std::s
             portdefined = true;
         }
         else if (ipHeader->ip_p == IPPROTO_ICMP){
-            //cout << "ICMP" << endl;
             dstport = 0;
             srcport = 0;
             portdefined = true;
@@ -132,19 +123,18 @@ int parsePcap(std::string filepath, int atimer, int timeout, int maxsize, std::s
 
         if(portdefined){
             key currentKey = {ipHeader->ip_src.s_addr,ipHeader->ip_dst.s_addr,srcport,dstport,ipHeader->ip_p};
-
+            //checks if the item with key is in map, otherwise it inserts new zeroed item with the key
             if (fcache.hasflow(currentKey) == false){   
-                //cout << "DEBUG: hasflow returned false creating new item in map" << endl;            
                 fcache.insertflow(currentKey, flowcachevalue());
                 flowcounter++;
             }
             flowcachevalue ptr = fcache.getflow(currentKey);
-
-            if (ptr.header.version == 0){
-                //std::cout << "updating header" << endl;
-                newHeader = updateHeader(newHeader,header,boottime,pktTime,flowcounter);
-            }
+            //only creates header when creating new flow
             
+            if(ptr.header.version == 0)
+                newHeader = updateHeader(newHeader,header,boottime,pktTime,flowcounter);
+            
+            //fills record with data
             newRecord = updateRecord(newRecord, ipHeader, ptr, header, boottime, ipSize);
             
             newRecord.dstport = dstport;
@@ -161,15 +151,11 @@ int parsePcap(std::string filepath, int atimer, int timeout, int maxsize, std::s
                 exportFlow(address, port, val);
             }
         }
-        
-        
-        //std::cout << fcache.size() << endl;
     }
     
     std::cout << "parsing finished, exporting the remaining flows in map" << endl;
 
     for (std::map<key, flowcachevalue>::iterator it = fcache.cachemap.begin(); it != fcache.cachemap.end(); ){
-        //std::cout << "HUE" << ntohs(std::get<2>(it->first)) << std::endl;
         flowcachevalue val = fcache.exportflow((it++)->first);
         exportFlow(address, port, val);
     }
@@ -177,12 +163,3 @@ int parsePcap(std::string filepath, int atimer, int timeout, int maxsize, std::s
     std::cout << "finished exporting flows from map, all sent to collector" << endl;
     return 0;
 }
-            /*char srcIp[INET_ADDRSTRLEN];
-            inet_ntop(AF_INET, &(ptr.record.srcaddr), srcIp, INET_ADDRSTRLEN);
-            
-            std::cout << srcIp << endl;*/
-            //std::cout << ptr.record.srcaddr << endl;
-
-                        //u_int srcport = ntohs(tcpHeader->source);
-            //u_int dstport = ntohs(tcpHeader->dest);
-            //cout << "src " << srcport << "dst " << dstport << endl;
